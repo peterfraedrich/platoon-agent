@@ -1,0 +1,6 @@
+{
+    "name" : "msp",
+    "type" : "http_status",
+    "url" : "http://127.0.0.1:8080/msp/api/v1.5/healthcheck",
+    "pass" : 200
+}
