@@ -1,0 +1,19 @@
+{
+  "name": "platoon-agent",
+  "version": "0.0.1",
+  "description": "agent for platoon",
+  "main": "platoon-agent.js",
+  "scripts": {
+    "test": "nodemon platoon-agent.js".
+    "start": "/usr/bin/node /platoon-agent/platoon-agent.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/peterfraedrich/platoon-agent.git"
+  },
+  "author": "Peter Fraedrich",
+  "license": "None",
+  "bugs": {
+    "url": "https://github.com/peterfraedrich/platoon-agent/issues"
+  }
+}
