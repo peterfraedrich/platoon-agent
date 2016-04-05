@@ -124,7 +124,7 @@ var type_http_status = function (svc, callback) {
     */
     var stime = process.hrtime()
     try {
-        request(svc.url, function (err, res, body) {
+        request({url : svc.url, timeout : 2000}, function (err, res, body) {
             var diff = (process.hrtime(stime)[1] / 1000000).toFixed(2)
             if (!err) {
                 return callback(null, res.statusCode, diff)
