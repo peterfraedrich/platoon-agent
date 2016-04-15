@@ -1,0 +1,6 @@
+{
+    "name" : "cmd_output",
+    "type" : "cmd",
+    "command" : "cat /proc/version",
+    "pass" : "Linux version 3.10.0-327.10.1.el7.x86_64 (builder@kbuilder.dev.centos.org) (gcc version 4.8.3 20140911 (Red Hat 4.8.3-9) (GCC) ) #1 SMP Tue Feb 16 17:03:50 UTC 2016"
+}

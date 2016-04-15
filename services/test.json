@@ -1,6 +1,6 @@
 {
 	"name" : "test-service-2",
-	"type" : "cmd",
+	"type" : "cmd-length",
 	"command" : "echo 'command complete'",
 	"pass" : 1
 }

@@ -88,18 +88,25 @@ var log = function (msg) {
 var load_service_list = function () {
     /*
         reads the 'service' directory and generates a list of
-        service definitions, returns an array
+        service definitions, returns an array. filters out
+        files that don't end in .json
     */
     try {
-        return fs.readdirSync('./services')
+       var files = fs.readdirSync('./services')
+       var flist = []
+       for (i = 0; i < files.length; i++) {
+            if (files[i].split('.')[1] == 'json') {
+                flist.push(files[i])
+            } 
+       }
+       return flist
     } catch (e) {
         log(e)
         return []
     }
-    
 }
 
-var type_cmd = function (svc, callback) {
+var type_cmd_length = function (svc, callback) {
     /*
         method for the 'cmd' service type. returns stdout from the
         command that was run and the total time it took to run it.
@@ -149,13 +156,30 @@ var type_systemd = function (svc, callback) {
     var stime = process.hrtime()
     cmd('systemctl is-active ' + svc.unit_file, function (err, stdout, stderr) {
         var diff = (process.hrtime(stime)[1] / 1000000).toFixed(2)
-        if (stdout == svc.pass+'\n') {
+        if (stdout == svc.pass.toString()+'\n') {
             return callback(null, 'ok', diff)
-        } else {
-            log('Systemd result mismatch. [ result :' + stdout.split('\n')[0] + '; expected : ' + svc.pass + ' ]')
+        } else { 
+            log('Systemd result mismatch. [ result : ' + stdout.split('\n')[0] + '; expected : ' + svc.pass + ' ]')
             return callback('err', 'err', diff)
         }
     })
+}
+
+var type_cmd = function (svc, callback) {
+    /*
+        the cmd service type. runs a provided command and compares to the 
+        expected output. if != then fail, if == then pass.
+    */
+    var stime = process.hrtime()
+    cmd(svc.command, function (err, stdout, stderr) {
+        var diff = (process.hrtime(stime)[1] / 1000000).toFixed(2)
+        if (stdout == svc.pass.toString()+'\n') {
+            return callback(null, 'ok', diff)
+        } else {
+            log('cmd result mismatch. [ result : ' + stdout.split('\n')[0] + '; expected : ' + svc.pass.toString() + ' ]')
+            return callback('err','err', diff)
+        }
+    }) 
 }
 
 var check_service = function (filename, callback) {
@@ -169,8 +193,8 @@ var check_service = function (filename, callback) {
     try {
         var fname = './services/' + filename
         var svc = JSON.parse(fs.readFileSync(fname, 'utf-8'))
-        if (svc.type.toLowerCase() == 'cmd') {
-            type_cmd(svc, function (err, stdout, diff) {
+        if (svc.type.toLowerCase() == 'cmd-length') {
+            type_cmd_length(svc, function (err, stdout, diff) {
                 if (svc.pass <= stdout.length && !err) {
                     return callback(null, svc, diff)
                 } else {
@@ -194,6 +218,15 @@ var check_service = function (filename, callback) {
                 } else {
                     return callback(status, svc, diff)
                 }
+            })
+        }
+        else if (svc.type.toLowerCase() == 'cmd') {
+            type_cmd(svc, function (err, status, diff) {
+                if (status == 'ok' && !err) {
+                    return callback(null, svc, diff)
+                } else {
+                    return callback(status, svc, diff)
+                }                
             })
         }
         else {
