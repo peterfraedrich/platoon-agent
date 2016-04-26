@@ -12,7 +12,7 @@ var application_root = __dirname,
     fs = require('fs'),
     methodOverride = require('method-override'),
     request = require('request'),
-    cmd = require('child_process').exec,
+    thread = require('child_process').spawn,
     async = require('async'),
     ip = require('ip'),
     os = require('os'),
@@ -23,6 +23,7 @@ var application_root = __dirname,
 var startup_start = process.hrtime() // start the spool up timer
 var app = express();
 var gc = ini.parse(fs.readFileSync('platoon-agent.conf', 'utf-8'))
+gc.global.script_types = gc.global.script_types.split(',') // convert comma list to array because ini doesn't like arrays
 
 
 ////////////////////////////////////////////////////////// ALLOW XSS / CORS
@@ -88,14 +89,15 @@ var log = function (msg) {
 var load_service_list = function () {
     /*
         reads the 'service' directory and generates a list of
-        service definitions, returns an array. filters out
-        files that don't end in .json
+        service definitions, returns an array. filters out any
+        file extensions not defined in platoon-agent.conf:script_types
     */
     try {
        var files = fs.readdirSync('./services')
        var flist = []
        for (i = 0; i < files.length; i++) {
-            if (files[i].split('.')[1] == 'json') {
+            var file = files[i].split('.')[1]
+            if (gc.global.script_types.indexOf(file) != -1) {
                 flist.push(files[i])
             } 
        }
@@ -106,138 +108,36 @@ var load_service_list = function () {
     }
 }
 
-var type_cmd_length = function (svc, callback) {
+var check_service = function (s, callback) {
     /*
-        method for the 'cmd' service type. returns stdout from the
-        command that was run and the total time it took to run it.
+        spawns a worker thread to run the script
+        and evaluates the return code.
+        0 = OK
+        1 = ERR
     */
-    var stime = process.hrtime()
-    cmd(svc.command, function (err, stdout, stderr) {
-        var diff = (process.hrtime(stime)[1] / 1000000).toFixed(2)
-        if (!err) {
-            callback(null, stdout, diff)
-        } else {
-            log(err)
-            callback(stdout, null, diff)
-        }
-    })
-}
-
-var type_http_status = function (svc, callback) {
-    /*
-        method for the http-status service type. gets the HTTP status
-        code with an HTTP GET. returns the status vode and the total
-        time to took for the request.
-    */
-    var stime = process.hrtime()
     try {
-        request({url : svc.url, timeout : 2000}, function (err, res, body) {
-            var diff = (process.hrtime(stime)[1] / 1000000).toFixed(2)
-            if (!err) {
-                return callback(null, res.statusCode, diff)
+        var stime = process.hrtime() // start the clock
+        var t = thread('./services/' + s, [])
+        t.stderr.on('data', function (data) {
+            log(s + ' [ ' + data.toString() + ' ]')
+        })
+        t.stdout.on('data', function (data) {
+            log(s + ' [ ' + data.toString() + ' ]')
+        })
+        t.on('close', function (code) {
+            if (code == 0) {
+                return callback(null, (process.hrtime(stime)[1] / 1000000).toFixed(2))
             } else {
-                log('Bad HTTP GET. [ ' + svc.name + '; ' + svc.url +' ]')
-                return callback('err', null, diff)
+                log(s + ' [ ' + code + ' ]')
+                return callback(code, (process.hrtime(stime)[1] / 1000000).toFixed(2))
             }
+            
         })
     } catch (e) {
-        var diff = process.hrtime(stime)
         log(e)
-        return callback('err', null, diff)
+        return callback(e, (process.hrtime(stime)[1] / 1000000).toFixed(2))
     }
 }
-
-var type_systemd = function (svc, callback) {
-    /*
-        the systemd service type. uses 'systemctl is-active <service>'
-        command to check if a service is running or not. returns
-        a null value and the total command run time.
-    */
-    var stime = process.hrtime()
-    cmd('systemctl is-active ' + svc.unit_file, function (err, stdout, stderr) {
-        var diff = (process.hrtime(stime)[1] / 1000000).toFixed(2)
-        if (stdout == svc.pass.toString()+'\n') {
-            return callback(null, 'ok', diff)
-        } else { 
-            log('Systemd result mismatch. [ result : ' + stdout.split('\n')[0] + '; expected : ' + svc.pass + ' ]')
-            return callback('err', 'err', diff)
-        }
-    })
-}
-
-var type_cmd = function (svc, callback) {
-    /*
-        the cmd service type. runs a provided command and compares to the 
-        expected output. if != then fail, if == then pass.
-    */
-    var stime = process.hrtime()
-    cmd(svc.command, function (err, stdout, stderr) {
-        var diff = (process.hrtime(stime)[1] / 1000000).toFixed(2)
-        if (stdout == svc.pass.toString()+'\n') {
-            return callback(null, 'ok', diff)
-        } else {
-            log('cmd result mismatch. [ result : ' + stdout.split('\n')[0] + '; expected : ' + svc.pass.toString() + ' ]')
-            return callback('err','err', diff)
-        }
-    }) 
-}
-
-var check_service = function (filename, callback) {
-    /*
-        the guts of the app. it takes the services defined in the
-        service files and runs them through the service checks 
-        depending on what service type it is. returns the
-        service object and the total run time of each
-        check.
-    */
-    try {
-        var fname = './services/' + filename
-        var svc = JSON.parse(fs.readFileSync(fname, 'utf-8'))
-        if (svc.type.toLowerCase() == 'cmd-length') {
-            type_cmd_length(svc, function (err, stdout, diff) {
-                if (svc.pass <= stdout.length && !err) {
-                    return callback(null, svc, diff)
-                } else {
-                    return callback(stdout, svc, diff)
-                }
-            })
-        }
-        else if (svc.type.toLowerCase() == 'http-status') {
-            type_http_status(svc, function (err, status, diff) {
-                if (svc.pass == status && !err) {
-                    return callback(null, svc, diff)
-                } else {
-                    return callback('err', svc, diff)
-                }
-            })
-        }
-        else if (svc.type.toLowerCase() == 'systemd') {
-            type_systemd(svc, function (err, status, diff) {
-                if (status == 'ok' && !err) {
-                    return callback(null, svc, diff)
-                } else {
-                    return callback(status, svc, diff)
-                }
-            })
-        }
-        else if (svc.type.toLowerCase() == 'cmd') {
-            type_cmd(svc, function (err, status, diff) {
-                if (status == 'ok' && !err) {
-                    return callback(null, svc, diff)
-                } else {
-                    return callback(status, svc, diff)
-                }                
-            })
-        }
-        else {
-            log('Service type ' + svc.type + ' not recognized. Value should be http-status, cmd, or systemd.')
-            return callback('err', svc, null)
-        }
-    } catch (e) {
-        log(e)
-        return callback('err', null, null)
-    }
-}   
 
 ////////////////////////////////////////////////////////// PUBLIC API
 
@@ -267,23 +167,23 @@ app.get('/healthcheck', function (req, res) {
         var service_list = load_service_list()
         if (service_list.length > 0) {
             var results = {}
+            results.ip = ip.address()
+            results.hostname = os.hostname()
             results.services = []
             load_config()
             async.each(service_list, function (s, callback) {
-                check_service(s, function (err, svc, diff) {
+                check_service(s, function (err, diff) {
                     if (err) {
                         var svcObj = {
-                            "name" : svc.name,
+                            "name" : s,
                             "status" : 'err',
                             "ms" : diff,
-                            "object" : svc
                         }
                     } else {
                         var svcObj = {
-                            "name" : svc.name,
+                            "name" : s,
                             "status" : 'ok',
                             "ms" : diff,
-                            "object" : svc
                         }
                     }
                     results.services.push(svcObj)
@@ -291,8 +191,6 @@ app.get('/healthcheck', function (req, res) {
                 })
             },
             function () {
-                results.ip = ip.address()
-                results.hostname = os.hostname()
                 results.ms = (process.hrtime(stime)[1] / 1000000).toFixed(2)
                 log('Completed healthcheck in ' + results.ms + 'ms for services ' + service_list.toString())
                 res.send(results)
