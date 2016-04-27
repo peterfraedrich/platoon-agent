@@ -1,4 +1,4 @@
-# Platoon
+# Platoon Agent
 
 Platoon is a server/agent model, HTTP-based micro-cluster healthcheck system that allows you to monitor arbitrary `services` via scripts and send notifications to arbitrary `notifiers` via scripts. 
 
@@ -40,3 +40,21 @@ The above example would return as failed (`exit 1`) if the `httpd` service is ei
 
 **NOTE:** Service scripts should be executable without prepending the script runtime (ie, `./script.sh` instead of `bash script.sh`), be sure to put the script runtime (ex, `#!/usr/bin/python`) in the first line of the script and have the runtime in `$PATH`.
 
+
+## FAQ
+
+* Can it support script types other than python, shell, perl, and javascript?
+
+Yes. It can support any executable that returns an exit code. 
+
+* How many services can it support?
+
+I don't know, really. How many services can you write?
+
+* Why scripts?
+
+The initial idea was to define services in JSON, but that turned out to be inflexible as the services would have to be pre-defined inside the code itself. Using scripts allows the admins greater flexibility on what to monitor and how. 
+
+* Can I monitor x service?
+
+Sure, if you can write a script to do it. You are only limited by your imagination.
