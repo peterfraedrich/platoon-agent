@@ -1,6 +1,0 @@
-{
-	"name" : "tomcat",
-	"type" : "systemd",
-	"unit_file" : "tomcat.service",
-	"pass" : "unknown"
-}
