@@ -119,10 +119,10 @@ var check_service = function (s, callback) {
         var stime = process.hrtime() // start the clock
         var t = thread('./services/' + s, [])
         t.stderr.on('data', function (data) {
-            log(s + ' [ ' + data.toString() + ' ]')
+            log(s + ' [ ' + data.toString().replace(/\n/, '') + ' ]') 
         })
         t.stdout.on('data', function (data) {
-            log(s + ' [ ' + data.toString() + ' ]')
+            log(s + ' [ ' + data.toString().replace(/\n/, '') + ' ]')
         })
         t.on('close', function (code) {
             if (code == 0) {
@@ -134,7 +134,7 @@ var check_service = function (s, callback) {
             
         })
     } catch (e) {
-        log(e)
+        log(e.toString().replace(/\n/, ''))
         return callback(e, (process.hrtime(stime)[1] / 1000000).toFixed(2))
     }
 }
